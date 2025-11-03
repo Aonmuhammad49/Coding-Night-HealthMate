@@ -10,17 +10,6 @@ import { FiEdit2, FiTrash2, FiPlus, FiFileText, FiX } from 'react-icons/fi'
 import { format } from 'date-fns'
 
 // Mock "DB" – replace with Supabase in production
-type ReportAnalysis = {
-  highlights: string[]
-  summaryEnglish: string
-  summaryRomanUrdu: string
-  doctorQuestions: string[]
-  foodsAvoid: string[]
-  foodsRecommend: string[]
-  homeRemedies: string[]
-  note: string
-}
-
 type Report = {
   id: number
   type: string
@@ -31,7 +20,7 @@ type Report = {
   sugar?: string // e.g. "95"
   weight?: string // e.g. "72"
   notes?: string
-  analysis?: ReportAnalysis // AI-generated structured analysis
+  summary?: string // AI-generated summary
 }
 
 let mockReports: Report[] = [
@@ -45,7 +34,6 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<Report[]>(mockReports)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [viewAnalysisOf, setViewAnalysisOf] = useState<Report | null>(null)
   const [form, setForm] = useState({
     type: '',
     date: '',
@@ -120,23 +108,14 @@ export default function ReportsPage() {
         ...newReport,
         id: Math.max(...reports.map((r) => r.id)) + 1,
         status: updatedStatus,
-        analysis: {
-          highlights: aiData.highlights || [],
-          summaryEnglish: aiData.summary?.english || '',
-          summaryRomanUrdu: aiData.summary?.romanUrdu || '',
-          doctorQuestions: aiData.doctorQuestions || [],
-          foodsAvoid: aiData.foods?.avoid || [],
-          foodsRecommend: aiData.foods?.recommend || [],
-          homeRemedies: aiData.homeRemedies || [],
-          note: aiData.note || '',
-        },
+        summary: aiData.summary, // AI summary (English + Roman Urdu if configured)
       }
 
       // 5. Add to "DB" and state (mock; replace with Supabase insert in prod)
       mockReports = [...mockReports, finalReport]
       setReports(mockReports)
 
-      alert(`✅ Report added & analyzed!\nStatus: ${updatedStatus}`)
+      alert(`✅ Report added & analyzed!\nStatus: ${updatedStatus}\nSummary: ${aiData.summary}`)
     } catch (err: any) {
       console.error('Error:', err)
       alert(`⚠️ Upload failed: ${err.message}\nReport added as "Uploaded" anyway.`)
@@ -145,7 +124,7 @@ export default function ReportsPage() {
         ...newReport,
         id: Math.max(...reports.map((r) => r.id)) + 1,
         status: 'Uploaded',
-        analysis: undefined,
+        summary: 'AI analysis unavailable.',
       }
       mockReports = [...mockReports, fallbackReport]
       setReports(mockReports)
@@ -238,14 +217,6 @@ export default function ReportsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{report.fileName}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
-                      {report.analysis && (
-                        <button
-                          onClick={() => setViewAnalysisOf(report)}
-                          className="text-green-700 hover:text-green-900 p-1 rounded"
-                        >
-                          View
-                        </button>
-                      )}
                       <button className="text-blue-600 hover:text-blue-900 p-1 rounded">
                         <FiEdit2 className="text-sm" />
                       </button>
@@ -391,94 +362,6 @@ export default function ReportsPage() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Analysis Modal */}
-      {viewAnalysisOf && viewAnalysisOf.analysis && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 relative">
-            <button
-              onClick={() => setViewAnalysisOf(null)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              <FiX className="text-xl" />
-            </button>
-
-            <h2 className="text-xl font-bold text-gray-900 mb-1">AI Report Analysis</h2>
-            <p className="text-sm text-gray-500 mb-5">{viewAnalysisOf.type} • {format(new Date(viewAnalysisOf.date), 'dd MMM yyyy')}</p>
-
-            {/* Summaries */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Summary (English)</h3>
-                <p className="text-sm text-gray-700 whitespace-pre-line">{viewAnalysisOf.analysis.summaryEnglish}</p>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Summary (Roman Urdu)</h3>
-                <p className="text-sm text-gray-700 whitespace-pre-line">{viewAnalysisOf.analysis.summaryRomanUrdu}</p>
-              </div>
-            </div>
-
-            {/* Highlights */}
-            {viewAnalysisOf.analysis.highlights.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Highlights</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  {viewAnalysisOf.analysis.highlights.map((h, idx) => (
-                    <li key={idx}>{h}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Diet tips */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Foods to Avoid</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  {viewAnalysisOf.analysis.foodsAvoid.map((f, idx) => (
-                    <li key={idx}>{f}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Better Foods</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  {viewAnalysisOf.analysis.foodsRecommend.map((f, idx) => (
-                    <li key={idx}>{f}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Questions + Remedies */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Ask Your Doctor</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  {viewAnalysisOf.analysis.doctorQuestions.map((q, idx) => (
-                    <li key={idx}>{q}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="rounded-xl border border-gray-200 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Home Remedies</h3>
-                <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                  {viewAnalysisOf.analysis.homeRemedies.map((r, idx) => (
-                    <li key={idx}>{r}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {/* Note */}
-            {viewAnalysisOf.analysis.note && (
-              <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-4 text-sm text-yellow-900">
-                {viewAnalysisOf.analysis.note}
-              </div>
-            )}
           </div>
         </div>
       )}

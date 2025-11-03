@@ -4,32 +4,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
 
 // ──────────────────────────────────────────────────────────────
-// Initialize Gemini model (SDK) if API key is provided
+// Initialize Gemini 2.5 Pro
 // ──────────────────────────────────────────────────────────────
-const apiKey =
-  process.env.GEMINI_API_KEY ||
-  process.env.GOOGLE_API_KEY ||
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-  process.env.GENAI_API_KEY ||
-  process.env.GOOGLE_GENAI_API_KEY ||
-  '';
-const restUrlRaw =
-  process.env.GEMINI_API_URL ||
-  process.env.NEXT_PUBLIC_GEMINI_API_URL ||
-  process.env.GEMINI_URL ||
-  process.env.GOOGLE_GENAI_URL ||
-  '';
-// If REST URL is Google endpoint and no key embedded, append key if available
-const restUrl = (() => {
-  if (!restUrlRaw) return ''
-  if (restUrlRaw.includes('key=')) return restUrlRaw
-  if (!apiKey) return restUrlRaw
-  const hasQuery = restUrlRaw.includes('?')
-  return `${restUrlRaw}${hasQuery ? '&' : '?'}key=${apiKey}`
-})()
-const useSdk = Boolean(apiKey);
-const genAI = useSdk ? new GoogleGenerativeAI(apiKey) : null as unknown as GoogleGenerativeAI;
-const model = useSdk ? genAI.getGenerativeModel({ model: 'gemini-1.5-pro' }) : null as any;
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
 // ──────────────────────────────────────────────────────────────
 // Zod Schema for AI Response
@@ -66,8 +44,9 @@ export async function POST(request: NextRequest) {
       ? 'application/pdf'
       : 'image/jpeg';
 
-    // Note: No need to decode base64 on server; SDK accepts inline base64 data
+    // Convert base64 to Uint8Array
     const base64Data = fileBase64.split(',')[1];
+    const fileBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
     // ────── Gemini Prompt (Multimodal) ──────
     const prompt = `
@@ -101,45 +80,17 @@ Respond ONLY with valid JSON matching this schema:
 `.trim();
 
     // ────── Call Gemini with file + prompt ──────
-    let responseText = ''
-    if (useSdk) {
-      const result = await model.generateContent([
-        { text: prompt },
-        {
-          inlineData: {
-            mimeType,
-            data: base64Data,
-          },
+    const result = await model.generateContent([
+      { text: prompt },
+      {
+        inlineData: {
+          mimeType,
+          data: fileBase64.split(',')[1],
         },
-      ]);
-      responseText = result.response.text();
-    } else if (restUrl) {
-      // Use REST URL provided via env (must point to gemini-1.5-pro:generateContent with key if required)
-      const restRes = await fetch(restUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: mimeType, data: base64Data } },
-              ],
-            },
-          ],
-        }),
-      })
-      if (!restRes.ok) {
-        const errText = await restRes.text().catch(() => restRes.statusText)
-        throw new Error(`REST call failed: ${restRes.status} ${errText}`)
-      }
-      const json = await restRes.json()
-      // Parse Google response
-      responseText = json?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).join('') || ''
-    } else {
-      throw new Error('Gemini is not configured. Provide GEMINI_API_KEY or GEMINI_API_URL in .env')
-    }
+      },
+    ]);
+
+    const responseText = result.response.text();
 
     // Parse JSON from response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
